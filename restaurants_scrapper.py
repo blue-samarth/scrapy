@@ -17,6 +17,8 @@ from playwright.sync_api import (
     TimeoutError,
 )
 from tenacity import retry, stop_after_attempt, wait_exponential
+from playwright_stealth import stealth_sync
+from fake_useragent import UserAgent
 
 # Set up the logger
 logging.basicConfig(level=logging.INFO)
@@ -37,13 +39,15 @@ class RestaurantScraper:
         self.page: Page|None = None
         self.context: BrowserContext|None = None
         self.restaurants: list[dict] = []
-        logger.info("RestrauntScrapper object created")
+        logger.info("RestuarantScraper object created")
 
     def initialize_browser(self) -> None:
         """
         This method is used to initialize the browser
         """
         try:
+            ua: UserAgent = UserAgent()
+            logger.info("User agent created")
             self.playwright = sync_playwright().start()
             self.browser = self.playwright.chromium.launch(
                 headless=False,
@@ -52,11 +56,13 @@ class RestaurantScraper:
             logger.info("Browser initialized")
 
             self.context = self.browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"
+                # user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36"
+                user_agent=ua.random
             )
             logger.info("Browser context created")
 
             self.page = self.context.new_page()
+            stealth_sync(self.page)
             logger.info("Page created")
             
             logger.info("Browser, context and page initialized")
@@ -100,7 +106,7 @@ class RestaurantScraper:
         """
         try:
             accept_all_button: Locator = self.page.get_by_role("button", name="Accept all", exact=True)
-            if accept_all_button.is_visible():
+            if accept_all_button.is_visible(timeout=3000):
                 accept_all_button.click()
                 logger.info("Accept All button clicked")
                 self.page.wait_for_load_state("networkidle")
@@ -149,10 +155,12 @@ class RestaurantScraper:
         except PlaywrightError as e:
             logger.error(f"Playwright error during scrapping restaurants: {e}")
             self._cleanup_resources()
+            self.initialize_browser()
             raise
         except Exception as e:
             logger.error(f"Unexpected error during scrapping restaurants: {e}")
             self._cleanup_resources()
+            self.initialize_browser()
             raise
 
     def _get_restaurant_details(self, restaurant: Locator) -> dict:
@@ -173,7 +181,7 @@ class RestaurantScraper:
             name: str = self._safe_extract(soup, "h3", "N/A")
             rating: str = self._safe_extract(soup, "span[aria-label]", "N/A")
             address: str = self._safe_extract(soup, "[data-dtype='d3adr']", "N/A")
-            phone: str = self._safe_extract(soup, "[data-dtype='d3ph']", "N/A")
+            phone:str = self._safe_extract(soup, "div:has(> svg[aria-label='Phone']) + div", "N/A")
 
             return {
                 "Name": name,

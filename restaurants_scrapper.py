@@ -12,7 +12,6 @@ from playwright.sync_api import (
     Page,
     BrowserContext,
     Playwright,
-    PlaywrightError,
     Locator,
     TimeoutError,
 )
@@ -32,14 +31,14 @@ class RestaurantScraper:
         """
         Constructor
         """
-        self.region: str = region
+        self.region: str = region.strip().replace(" ", "+")
         self.output_file: str = output_file
         self.playwright: Playwright|None = None
         self.browser: Browser|None = None
         self.page: Page|None = None
         self.context: BrowserContext|None = None
         self.restaurants: list[dict] = []
-        logger.info("RestuarantScraper object created")
+        logger.info("RestaurantScraper object created")
 
     def initialize_browser(self) -> None:
         """
@@ -50,7 +49,7 @@ class RestaurantScraper:
             logger.info("User agent created")
             self.playwright = sync_playwright().start()
             self.browser = self.playwright.chromium.launch(
-                headless=False,
+                headless=True,
                 args=["--disable-blink-features=AutomationControlled"],
             )
             logger.info("Browser initialized")
@@ -67,7 +66,7 @@ class RestaurantScraper:
             
             logger.info("Browser, context and page initialized")
 
-        except PlaywrightError as e:
+        except TimeoutError as e:
             logger.error(f"Playwright error during initialization: {e}")
             self._cleanup_resources()
             raise
@@ -93,7 +92,7 @@ class RestaurantScraper:
             if self.playwright:
                 self.playwright.stop()
                 logger.info("Playwright stopped")
-        except PlaywrightError as e:
+        except TimeoutError as e:
             logger.error(f"Playwright error during cleanup: {e}")
             raise
         except Exception as e:
@@ -112,7 +111,7 @@ class RestaurantScraper:
                 self.page.wait_for_load_state("networkidle")
             else:
                 logger.info("Accept All button not found or is not visible")
-        except PlaywrightError as e:
+        except TimeoutError as e:
             logger.debug("Cookie consent check timed out (likely not present)")
         except Exception as e:
             logger.warning(f"Unexpected error during accepting cookies: {e}")
@@ -122,7 +121,7 @@ class RestaurantScraper:
         """
         This method is used to scrap the restaurants 
         Raises:
-            PlaywrightError: This method raises an error if a playwright error occurs
+            TimeoutError: This method raises an error if a playwright error occurs
             Exception: This method raises an exception if an error occurs
         """
         try:
@@ -131,7 +130,7 @@ class RestaurantScraper:
             logger.info(f"Page navigated to: {url}")
             try:
                 self.page.wait_for_selector("div.g", state="attached", timeout=10000)
-            except PlaywrightError as e:
+            except TimeoutError as e:
                 logger.error(f"Playwright error during waiting for selector: {e}")
                 return
             self.accept_cookies()
@@ -152,7 +151,7 @@ class RestaurantScraper:
 
             logger.info("Restaurants scrapped")
 
-        except PlaywrightError as e:
+        except TimeoutError as e:
             logger.error(f"Playwright error during scrapping restaurants: {e}")
             self._cleanup_resources()
             self.initialize_browser()
@@ -171,7 +170,7 @@ class RestaurantScraper:
         Returns:
             dict: This method returns the details of the restaurant
         Raises:
-            PlaywrightError: This method raises an error if a playwright error occurs
+            TimeoutError: This method raises an error if a playwright error occurs
             Exception: This method raises an exception if an error occurs
         """
         try:
@@ -189,7 +188,7 @@ class RestaurantScraper:
                 "Address": address,
                 "Phone": phone
             }
-        except PlaywrightError as e:
+        except TimeoutError as e:
             logger.error(f"Playwright error during getting restaurant details: {e}")
             raise
         except Exception as e:
@@ -242,3 +241,10 @@ class RestaurantScraper:
         This method is used to exit the context
         """
         self._cleanup_resources()
+
+
+
+if __name__ == "__main__":
+    with RestaurantScraper() as scraper:
+        scraper.get_restaurants()
+        scraper.save_to_csv()
